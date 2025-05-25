@@ -1,0 +1,237 @@
+#pragma once
+// clang-format off
+/* === MODULE MANIFEST ===
+module_name: NetDebugLink
+module_description: 
+  通过 WiFi 实现远程调试、日志查看与控制的多串口桥接模块 /
+  A multi-port bridge module enabling remote debugging, logging, and control via WiFi
+constructor_args:
+  - tcp_port: 5000                # TCP 端口 / TCP port
+  - udp_port: 5001                # UDP 端口 / UDP port
+  - thread_stack_size: 8192
+  - usb: uart_cdc
+  - uarts:
+    - UART0
+required_hardware: 
+  - wifi_client/WiFiClient        # WiFi 客户端 / WiFi client
+  - usb/uart_cdc                  # USB CDC 主模式连接 Linux 主机 / USB CDC host mode to control Linux
+  - uart/UART0
+  - uart/UART1
+  - button                 # 配置按钮 / Configuration button
+repository: https://github.com/xrobot-org/NetDebugLink
+=== END MANIFEST === */
+// clang-format on
+
+#include <lwip/sockets.h>
+
+#include "app_framework.hpp"
+#include "gpio.hpp"
+#include "libxr.hpp"
+#include "logger.hpp"
+#include "net/wifi_client.hpp"
+#include "pwm.hpp"
+#include "uart.hpp"
+
+class NetDebugLink : public LibXR::Application {
+ public:
+  enum class Mode { Init, SMART_CONFIG, SCANING, CONNECTED };
+
+  typedef struct {
+    LibXR::UART *uart;
+    LibXR::Topic topic;
+  } UartInfo;
+
+  NetDebugLink(LibXR::HardwareContainer &hw, LibXR::ApplicationManager &app,
+               uint32_t tcp_port, uint32_t udp_port, uint32_t thread_stack_size,
+               const char *usb,
+               const std::initializer_list<const char *> &uarts)
+      : tcp_port_(tcp_port), udp_port_(udp_port), to_host_data_queue_(1, 4096) {
+    instance_ = this;
+
+    BlufiInit();
+
+    led_ = hw.template FindOrExit<LibXR::PWM>({"led", "LED", "led1", "LED1"});
+    button_ = hw.template FindOrExit<LibXR::GPIO>({"button"});
+    wifi_ = hw.template FindOrExit<LibXR::WifiClient>({"wifi_client"});
+    uart_cdc_ = hw.template FindOrExit<LibXR::UART>({usb});
+
+    auto cdc_node = new LibXR::LockFreeList::Node<UartInfo>(
+        {uart_cdc_, LibXR::Topic(usb, 4096)});
+    uarts_.Add(*cdc_node);
+
+    for (auto uart_name : uarts) {
+      auto node = new LibXR::LockFreeList::Node<UartInfo>(
+          {hw.template FindOrExit<LibXR::UART>({uart_name}),
+           LibXR::Topic(uart_name, 4096)});
+      uarts_.Add(*node);
+    }
+
+    PeripheralInit();
+
+    thread_.Create(this, ThreadFun, "NetDebugLink", thread_stack_size,
+                   LibXR::Thread::Priority::MEDIUM);
+
+    InitDataLink();
+
+    app.Register(*this);
+  }
+
+  void InitDataLink() {
+    static uint8_t read_buf[4096];
+    static uint8_t pack_buf[4096 + LibXR::Topic::PACK_BASE_SIZE];
+    void (*push_uart_data)(NetDebugLink *) = [](NetDebugLink *self) {
+      LibXR::ReadOperation read_op(self->read_sem_, 20);
+      self->uarts_.Foreach<UartInfo>([&](UartInfo &info) {
+        auto &uart = info.uart;
+        auto topic = LibXR::Topic::TopicHandle(info.topic);
+        auto read_able_size =
+            LibXR::min(uart->read_port_->Size(), sizeof(read_buf));
+        if (read_able_size > 0) {
+          uart->Read({read_buf, read_able_size}, read_op);
+          LibXR::Topic::PackData(topic->data_.crc32, {read_buf, read_able_size},
+                                 pack_buf);
+
+          LibXR::Mutex::LockGuard guard(self->to_host_data_queue_mutex_);
+          self->to_host_data_queue_.PushBatch(
+              pack_buf, read_able_size + LibXR::Topic::PACK_BASE_SIZE);
+        }
+
+        return ErrorCode::OK;
+      });
+    };
+
+    auto task_handle = LibXR::Timer::CreateTask(push_uart_data, this, 2);
+    LibXR::Timer::Add(task_handle);
+    LibXR::Timer::Start(task_handle);
+  }
+
+  static void ThreadFun(NetDebugLink *self) {
+    static uint8_t buf[1024];
+
+    while (true) {
+      self->mode_ = Mode::SCANING;
+
+      struct sockaddr_in addr{};
+      addr.sin_family = AF_INET;
+      addr.sin_port = htons(self->udp_port_);
+      addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+      int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+      if (sock < 0) {
+        XR_LOG_ERROR("socket failed");
+        continue;
+      }
+
+      if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        XR_LOG_ERROR("bind failed");
+        close(sock);
+        continue;
+      }
+
+      struct timeval timeout = {.tv_sec = 5, .tv_usec = 0};
+      setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+      while (true) {
+        if (self->smartconfig_requested_ || !self->wifi_->IsConnected()) {
+          self->smartconfig_requested_ = false;
+          self->mode_ = Mode::SMART_CONFIG;
+
+          auto result = self->StartBlufiBlocking(30000);
+          if (result != ErrorCode::OK) {
+            XR_LOG_WARN("BLUFI failed or timed out: %d", result);
+            self->mode_ = Mode::SMART_CONFIG;
+          } else {
+            XR_LOG_INFO("BLUFI success");
+            self->mode_ = Mode::SCANING;
+          }
+        }
+
+        struct sockaddr_in sender;
+        socklen_t sender_len = sizeof(sender);
+        int len = recvfrom(sock, buf, sizeof(buf) - 1, 0,
+                           (struct sockaddr *)&sender, &sender_len);
+        if (len >= 0) {
+          buf[len] = 0;
+          XR_LOG_INFO("Received from %s: %s", inet_ntoa(sender.sin_addr), buf);
+          self->mode_ = Mode::CONNECTED;
+          self->OnConnected(&sender);
+        } else {
+          XR_LOG_WARN("recvfrom timed out");
+          self->mode_ = Mode::SCANING;
+        }
+      }
+
+      close(sock);
+    }
+  }
+
+  void OnConnected(struct sockaddr_in *addr) {
+    int tcp_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (tcp_sock < 0) {
+      XR_LOG_ERROR("TCP socket creation failed");
+      return;
+    }
+
+    addr->sin_family = AF_INET;
+    addr->sin_port = htons(tcp_port_);
+
+    XR_LOG_INFO("Connecting to TCP server %s:%d", inet_ntoa(addr->sin_addr),
+                tcp_port_);
+
+    if (connect(tcp_sock, (struct sockaddr *)addr, sizeof(*addr)) != 0) {
+      XR_LOG_ERROR("TCP connect failed");
+      close(tcp_sock);
+      return;
+    }
+
+    while (!smartconfig_requested_) {  // 连接成功，发送数据
+      static uint8_t buf[4096];
+      to_host_data_queue_mutex_.Lock();
+      auto len = to_host_data_queue_.Size();
+      if (len > 0) {
+        to_host_data_queue_.PopBatch(buf, len);
+        to_host_data_queue_mutex_.Unlock();
+        send(tcp_sock, buf, len, 0);
+      } else {
+        to_host_data_queue_mutex_.Unlock();
+      }
+      LibXR::Thread::Sleep(2);
+    }
+
+    close(tcp_sock);
+  }
+
+  void OnMonitor() override {}
+
+  void OnButton() { smartconfig_requested_ = true; }
+
+  void BlufiInit();
+
+  void PeripheralInit();
+
+  ErrorCode StartBlufiBlocking(uint32_t timeout_ms);
+
+  static inline NetDebugLink *instance_ = nullptr;
+
+  Mode mode_ = Mode::Init;
+  bool smartconfig_requested_ = false;
+
+  static constexpr int GOT_CREDENTIAL_BIT = 1;
+  LibXR::WifiClient::Config sta_cfg_;
+
+  uint32_t tcp_port_;
+  uint32_t udp_port_;
+
+  LibXR::GPIO *button_;
+  LibXR::PWM *led_;
+  LibXR::UART *uart_cdc_;
+  LibXR::WifiClient *wifi_;
+  LibXR::LockFreeList uarts_;
+  LibXR::LockFreeList topics_;
+
+  LibXR::BaseQueue to_host_data_queue_;
+  LibXR::Mutex to_host_data_queue_mutex_;
+  LibXR::Semaphore read_sem_;
+
+  LibXR::Thread thread_;
+};

@@ -112,7 +112,15 @@
     "socket": "cpp",
     "timer": "cpp",
     "future": "cpp",
-    "buffer": "cpp"
+    "buffer": "cpp",
+    "bitset": "cpp",
+    "regex": "cpp",
+    "esp_event.h": "c",
+    "esp_crc.h": "c",
+    "esp_blufi_api.h": "c",
+    "esp_random.h": "c",
+    "esp_err.h": "c"
   },
-  "idf.flashBaudRate": "4000000"
+  "idf.flashBaudRate": "4000000",
+  "C_Cpp.clang_format_fallbackStyle": "Google"
 }

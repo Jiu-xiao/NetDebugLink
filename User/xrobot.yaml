@@ -1,0 +1,12 @@
+global_settings:
+  monitor_sleep_ms: 1000
+modules:
+- name: NetDebugLink
+  constructor_args:
+    tcp_port: 5000
+    udp_port: 5001
+    thread_stack_size: 12000
+    usb: uart_cdc
+    uarts:
+    - uart1
+    - uart2
