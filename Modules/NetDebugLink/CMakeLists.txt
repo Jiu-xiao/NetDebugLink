@@ -10,3 +10,5 @@ file(GLOB MODULE_NETDEBUGLINK_SRC
 )
 
 target_sources(xr PRIVATE ${MODULE_NETDEBUGLINK_SRC})
+
+target_compile_definitions(xr PUBLIC LIBXR_DEBUG_BUILD)

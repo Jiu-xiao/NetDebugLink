@@ -106,12 +106,11 @@ void BlufiEventCallback(esp_blufi_cb_event_t event,
               (const char *)param->sta_passwd.passwd,
               param->sta_passwd.passwd_len);
       self->sta_cfg_.password[param->sta_passwd.passwd_len] = '\0';
-      xEventGroupSetBits(s_wifi_event_group, NetDebugLink::GOT_CREDENTIAL_BIT);
       break;
 
     case ESP_BLUFI_EVENT_REQ_CONNECT_TO_AP: {
       XR_LOG_INFO("BLUFI requests connect to AP");
-      self->wifi_->Connect(self->sta_cfg_);
+      xEventGroupSetBits(s_wifi_event_group, NetDebugLink::GOT_CREDENTIAL_BIT);
       break;
     }
 
@@ -177,6 +176,16 @@ ErrorCode NetDebugLink::StartBlufiBlocking(uint32_t timeout_ms) {
       wifi_->Connect(sta_cfg_);
       esp_blufi_host_deinit();
       esp_blufi_controller_deinit();
+
+      static LibXR::Topic::PackedData<LibXR::WifiClient::Config> buf;
+      if (wifi_->IsConnected()) {
+        LibXR::Topic::PackData(
+            LibXR::Topic::TopicHandle(wifi_config_topic_)->data_.crc32, buf,
+            sta_cfg_);
+        to_cdc_data_queue_mutex_.Lock();
+        to_cdc_data_queue_.PushBatch(&buf, sizeof(buf));
+        to_cdc_data_queue_mutex_.Unlock();
+      }
       return ErrorCode::OK;
     }
 
