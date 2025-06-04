@@ -1,11 +1,3 @@
-/* Blink Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include "esp_adc.hpp"
 #include "esp_gpio.hpp"
 #include "esp_pwm.hpp"
@@ -22,7 +14,7 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32Timebase timebase;
   LibXR::PlatformInit(static_cast<uint32_t>(LibXR::Thread::Priority::MEDIUM),
-                      8192);
+                      16000);
 
   LibXR::ESP32PWM led_pwm(GPIO_NUM_8, LEDC_CHANNEL_0, LEDC_TIMER_0,
                           LEDC_TIMER_14_BIT);
@@ -32,7 +24,7 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32GPIO button_gpio(GPIO_NUM_9);
 
-  LibXR::ESP32VirtualUART<1024> uart_cdc(20, 20, 10, 4096, 10, 4096);
+  LibXR::ESP32VirtualUART<2048> uart_cdc(20, 20, 10, 2048, 10, 2048);
 
   LibXR::ESP32UART uart_2(UART_NUM_0, 3, 4, 256, 2048, 20);
 

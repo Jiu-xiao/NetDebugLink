@@ -57,7 +57,7 @@ class NetDebugLink : public LibXR::Application {
         command_topic_("command", sizeof(Command)),
         to_net_data_queue_(1, 4096),
         to_cdc_data_queue_(1, 4096),
-        form_net_server_(4096) {
+        from_net_server_(4096) {
     instance_ = this;
 
     BlufiInit();
@@ -72,6 +72,7 @@ class NetDebugLink : public LibXR::Application {
         LibXR::RawData &data) = [](bool in_isr, LibXR::Topic::TopicHandle tp,
                                    LibXR::RawData &data) {
       auto foreach_fun = [&](UartInfo &info) {
+        XR_LOG_DEBUG("uart topic recv data");
         if (info.topic.GetKey() == instance_->uart_cdc_topic_.GetKey()) {
           LibXR::Mutex::LockGuard guard(instance_->to_cdc_data_queue_mutex_);
           instance_->to_cdc_data_queue_.PushBatch(data.addr_, data.size_);
@@ -91,7 +92,7 @@ class NetDebugLink : public LibXR::Application {
 
     auto cdc_node =
         new LibXR::LockFreeList::Node<UartInfo>({uart_cdc_, uart_cdc_topic_});
-    form_net_server_.Register(cdc_node->data_.topic);
+    from_net_server_.Register(cdc_node->data_.topic);
     auto from_net_data_cb_cdc = LibXR::Topic::Callback::Create(
         from_net_data_cb_fun, LibXR::Topic::TopicHandle(cdc_node->data_.topic));
     cdc_node->data_.topic.RegisterCallback(from_net_data_cb_cdc);
@@ -101,7 +102,7 @@ class NetDebugLink : public LibXR::Application {
       auto node = new LibXR::LockFreeList::Node<UartInfo>(
           {hw.template FindOrExit<LibXR::UART>({uart_name}),
            LibXR::Topic(uart_name, 4096)});
-      form_net_server_.Register(node->data_.topic);
+      from_net_server_.Register(node->data_.topic);
       auto from_net_data_cb = LibXR::Topic::Callback::Create(
           from_net_data_cb_fun, LibXR::Topic::TopicHandle(node->data_.topic));
       node->data_.topic.RegisterCallback(from_net_data_cb);
@@ -147,12 +148,18 @@ class NetDebugLink : public LibXR::Application {
             LibXR::min(uart->read_port_->Size(), sizeof(read_buf));
         if (read_able_size > 0) {
           uart->Read({read_buf, read_able_size}, read_op);
-          LibXR::Topic::PackData(topic->data_.crc32, pack_buf,
-                                 {read_buf, read_able_size});
+          if (uart != self->uart_cdc_) {
+            LibXR::Topic::PackData(topic->data_.crc32, pack_buf,
+                                   {read_buf, read_able_size});
 
-          LibXR::Mutex::LockGuard guard(self->to_net_data_queue_mutex_);
-          self->to_net_data_queue_.PushBatch(
-              pack_buf, read_able_size + LibXR::Topic::PACK_BASE_SIZE);
+            LibXR::Mutex::LockGuard guard(self->to_net_data_queue_mutex_);
+            self->to_net_data_queue_.PushBatch(
+                pack_buf, read_able_size + LibXR::Topic::PACK_BASE_SIZE);
+          }else{
+            LibXR::Mutex::LockGuard guard(self->to_cdc_data_queue_mutex_);
+            self->to_net_data_queue_.PushBatch(
+                read_buf, read_able_size);
+          }
         }
 
         return ErrorCode::OK;
@@ -170,6 +177,7 @@ class NetDebugLink : public LibXR::Application {
       LibXR::Mutex::LockGuard guard(self->to_cdc_data_queue_mutex_);
       auto write_able_size = self->to_cdc_data_queue_.Size();
       if (write_able_size > 0) {
+        XR_LOG_DEBUG("write to uart %d bytes", write_able_size);
         self->to_cdc_data_queue_.PopBatch(buf, write_able_size);
         self->uart_cdc_->Write({buf, write_able_size}, write_op);
       }
@@ -181,7 +189,7 @@ class NetDebugLink : public LibXR::Application {
   }
 
   static void ThreadFun(NetDebugLink *self) {
-    static uint8_t buf[1024];
+    static uint8_t buf[8192];
 
     while (true) {
       self->mode_ = Mode::SCANING;
@@ -299,6 +307,8 @@ class NetDebugLink : public LibXR::Application {
         close(tcp_sock);
         return;
       } else {
+        from_net_server_.ParseData(
+            {(uint8_t *)buf, static_cast<size_t>(bytes_received)});
         XR_LOG_DEBUG("Received %d bytes", bytes_received);
       }
 
@@ -366,7 +376,7 @@ class NetDebugLink : public LibXR::Application {
   LibXR::Mutex to_cdc_data_queue_mutex_;
   LibXR::Semaphore read_sem_;
   LibXR::Semaphore write_sem_;
-  LibXR::Topic::Server form_net_server_;
+  LibXR::Topic::Server from_net_server_;
 
   LibXR::Thread thread_;
 };
