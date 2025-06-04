@@ -36,10 +36,7 @@ class NetDebugLink : public LibXR::Application {
  public:
   enum class Mode { Init, SMART_CONFIG, SCANING, CONNECTED };
 
-  enum class Command : uint8_t {
-    PING = 0,
-    REBOOT = 1,
-  };
+  enum class Command : uint8_t { PING = 0, REMOTE_PING, REBOOT = 1 };
 
   typedef struct {
     LibXR::UART *uart;
@@ -129,9 +126,12 @@ class NetDebugLink : public LibXR::Application {
       self->to_cdc_data_queue_mutex_.Lock();
       self->to_cdc_data_queue_.PushBatch(&ping, sizeof(ping));
       self->to_cdc_data_queue_mutex_.Unlock();
+      self->to_net_data_queue_mutex_.Lock();
+      self->to_net_data_queue_.PushBatch(&ping, sizeof(ping));
+      self->to_net_data_queue_mutex_.Unlock();
     };
 
-    auto ping_task = LibXR::Timer::CreateTask(ping_task_fun, this, 1000);
+    auto ping_task = LibXR::Timer::CreateTask(ping_task_fun, this, 125);
     LibXR::Timer::Add(ping_task);
     LibXR::Timer::Start(ping_task);
   }
@@ -155,10 +155,9 @@ class NetDebugLink : public LibXR::Application {
             LibXR::Mutex::LockGuard guard(self->to_net_data_queue_mutex_);
             self->to_net_data_queue_.PushBatch(
                 pack_buf, read_able_size + LibXR::Topic::PACK_BASE_SIZE);
-          }else{
+          } else {
             LibXR::Mutex::LockGuard guard(self->to_cdc_data_queue_mutex_);
-            self->to_net_data_queue_.PushBatch(
-                read_buf, read_able_size);
+            self->to_net_data_queue_.PushBatch(read_buf, read_able_size);
           }
         }
 
@@ -211,7 +210,7 @@ class NetDebugLink : public LibXR::Application {
         continue;
       }
 
-      struct timeval timeout = {.tv_sec = 5, .tv_usec = 0};
+      struct timeval timeout = {.tv_sec = 0, .tv_usec = 0};
       setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
       while (true) {
@@ -321,7 +320,7 @@ class NetDebugLink : public LibXR::Application {
         to_net_data_queue_mutex_.Unlock();
         ssize_t ans = send(tcp_sock, send_buf, len, 0);
         if (ans < 0) {
-          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK || EINPROGRESS) {
             // 套接字不可用，继续轮询
           } else {
             XR_LOG_ERROR("TCP send failed: %d", errno);
