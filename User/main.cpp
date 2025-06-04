@@ -24,7 +24,7 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32GPIO button_gpio(GPIO_NUM_9);
 
-  LibXR::ESP32VirtualUART<2048> uart_cdc(20, 20, 10, 2048, 10, 2048);
+  LibXR::ESP32VirtualUART<2048> uart_cdc(20, 10, 2048, 10, 2048);
 
   LibXR::ESP32UART uart_2(UART_NUM_0, 3, 4, 256, 2048, 20);
 

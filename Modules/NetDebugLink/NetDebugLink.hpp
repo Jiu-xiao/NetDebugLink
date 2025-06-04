@@ -224,7 +224,7 @@ class NetDebugLink : public LibXR::Application {
             XR_LOG_WARN("BLUFI failed or timed out: %d", result);
             self->mode_ = Mode::SMART_CONFIG;
           } else {
-            XR_LOG_INFO("BLUFI success");
+            XR_LOG_PASS("BLUFI success");
             self->mode_ = Mode::SCANING;
           }
         }
