@@ -245,7 +245,18 @@ class NetDebugLink : public LibXR::Application {
     if (tcp_sock < 0) {
       XR_LOG_ERROR("TCP socket creation failed");
       return;
+    } else {
+      XR_LOG_INFO("TCP socket created");
     }
+
+    // 设置非阻塞模式
+    int flags = fcntl(tcp_sock, F_GETFL, 0);
+    if (flags == -1) {
+      XR_LOG_ERROR("fcntl get flags failed");
+      close(tcp_sock);
+      return;
+    }
+    fcntl(tcp_sock, F_SETFL, flags | O_NONBLOCK);
 
     addr->sin_family = AF_INET;
     addr->sin_port = htons(tcp_port_);
@@ -254,28 +265,79 @@ class NetDebugLink : public LibXR::Application {
                 tcp_port_);
 
     if (connect(tcp_sock, (struct sockaddr *)addr, sizeof(*addr)) != 0) {
-      XR_LOG_ERROR("TCP connect failed");
-      close(tcp_sock);
-      return;
+      if (errno != EINPROGRESS) {
+        XR_LOG_ERROR("TCP connect failed: %d", errno);
+        close(tcp_sock);
+        return;
+      }
     }
 
-    while (!smartconfig_requested_) {  // 连接成功，发送数据
-      static uint8_t buf[4096];
-      to_net_data_queue_mutex_.Lock();
-      auto len = to_net_data_queue_.Size();
-      if (len > 0) {
-        to_net_data_queue_.PopBatch(buf, len);
-        to_net_data_queue_mutex_.Unlock();
-        send(tcp_sock, buf, len, 0);
-      } else {
-        to_net_data_queue_mutex_.Unlock();
+    struct tcp_keepalive {
+      uint32_t keep_idle;   // 空闲时间
+      uint32_t keep_intvl;  // Keep Alive 间隔
+      uint32_t keep_count;  // 最大重试次数
+    };
+
+    tcp_keepalive ka = {.keep_idle = 5, .keep_intvl = 1, .keep_count = 5};
+    setsockopt(tcp_sock, IPPROTO_TCP, TCP_KEEPALIVE, &ka, sizeof(ka));
+
+    while (!smartconfig_requested_) {
+      fd_set readfds, writefds;
+      FD_ZERO(&readfds);
+      FD_ZERO(&writefds);
+      FD_SET(tcp_sock, &readfds);
+      FD_SET(tcp_sock, &writefds);
+
+      struct timeval timeout = {2, 0};  // 设置 select 超时
+
+      int ret = select(tcp_sock + 1, &readfds, &writefds, NULL, &timeout);
+      if (ret < 0) {
+        XR_LOG_ERROR("select failed: %d", errno);
+        close(tcp_sock);
+        return;
       }
-      LibXR::Thread::Sleep(2);
+
+      if (FD_ISSET(tcp_sock, &readfds)) {
+        // 检查是否有数据可读或连接关闭
+        char buf[4096];
+        ssize_t bytes_received = recv(tcp_sock, buf, sizeof(buf), 0);
+        if (bytes_received < 0) {
+          XR_LOG_ERROR("TCP recv failed: %d", errno);
+          close(tcp_sock);
+          return;
+        } else if (bytes_received == 0) {
+          // 连接关闭
+          XR_LOG_ERROR("Connection closed by server");
+          close(tcp_sock);
+          return;
+        } else {
+          XR_LOG_DEBUG("Received %d bytes", bytes_received);
+        }
+      }
+
+      if (FD_ISSET(tcp_sock, &writefds)) {
+        static uint8_t buf[4096];
+        to_net_data_queue_mutex_.Lock();
+        auto len = to_net_data_queue_.Size();
+        if (len > 0) {
+          to_net_data_queue_.PopBatch(buf, len);
+          to_net_data_queue_mutex_.Unlock();
+          ssize_t ans = send(tcp_sock, buf, len, 0);
+          if (ans < 0) {
+            XR_LOG_ERROR("TCP send failed: %d", errno);
+            close(tcp_sock);
+            return;
+          }
+        } else {
+          to_net_data_queue_mutex_.Unlock();
+        }
+      }
+
+      LibXR::Thread::Sleep(1);
     }
 
     close(tcp_sock);
   }
-
   void OnMonitor() override {}
 
   void OnButton() { smartconfig_requested_ = true; }
