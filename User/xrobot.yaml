@@ -5,7 +5,7 @@ modules:
   constructor_args:
     tcp_port: 5000
     udp_port: 5001
-    thread_stack_size: 12000
+    thread_stack_size: 40000
     usb: uart_cdc
     uarts:
     - uart1

@@ -147,8 +147,8 @@ class NetDebugLink : public LibXR::Application {
             LibXR::min(uart->read_port_->Size(), sizeof(read_buf));
         if (read_able_size > 0) {
           uart->Read({read_buf, read_able_size}, read_op);
-          LibXR::Topic::PackData(topic->data_.crc32, {read_buf, read_able_size},
-                                 pack_buf);
+          LibXR::Topic::PackData(topic->data_.crc32, pack_buf,
+                                 {read_buf, read_able_size});
 
           LibXR::Mutex::LockGuard guard(self->to_net_data_queue_mutex_);
           self->to_net_data_queue_.PushBatch(
@@ -245,7 +245,18 @@ class NetDebugLink : public LibXR::Application {
     if (tcp_sock < 0) {
       XR_LOG_ERROR("TCP socket creation failed");
       return;
+    } else {
+      XR_LOG_INFO("TCP socket created");
     }
+
+    // 设置非阻塞模式
+    int flags = fcntl(tcp_sock, F_GETFL, 0);
+    if (flags == -1) {
+      XR_LOG_ERROR("fcntl get flags failed");
+      close(tcp_sock);
+      return;
+    }
+    fcntl(tcp_sock, F_SETFL, flags | O_NONBLOCK);
 
     addr->sin_family = AF_INET;
     addr->sin_port = htons(tcp_port_);
@@ -254,23 +265,65 @@ class NetDebugLink : public LibXR::Application {
                 tcp_port_);
 
     if (connect(tcp_sock, (struct sockaddr *)addr, sizeof(*addr)) != 0) {
-      XR_LOG_ERROR("TCP connect failed");
-      close(tcp_sock);
-      return;
+      if (errno != EINPROGRESS) {
+        XR_LOG_ERROR("TCP connect failed: %d", errno);
+        close(tcp_sock);
+        return;
+      }
     }
 
-    while (!smartconfig_requested_) {  // 连接成功，发送数据
-      static uint8_t buf[4096];
+    struct tcp_keepalive {
+      uint32_t keep_idle;   // 空闲时间
+      uint32_t keep_intvl;  // Keep Alive 间隔
+      uint32_t keep_count;  // 最大重试次数
+    };
+
+    tcp_keepalive ka = {.keep_idle = 5, .keep_intvl = 1, .keep_count = 5};
+    setsockopt(tcp_sock, IPPROTO_TCP, TCP_KEEPALIVE, &ka, sizeof(ka));
+
+    while (!smartconfig_requested_) {
+      // 处理接收数据
+      char buf[4096];
+      ssize_t bytes_received = recv(tcp_sock, buf, sizeof(buf), 0);
+      if (bytes_received < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          // 没有数据可读，继续轮询
+        } else {
+          XR_LOG_ERROR("TCP recv failed: %d", errno);
+          close(tcp_sock);
+          return;
+        }
+      } else if (bytes_received == 0) {
+        // 连接关闭
+        XR_LOG_ERROR("Connection closed by server");
+        close(tcp_sock);
+        return;
+      } else {
+        XR_LOG_DEBUG("Received %d bytes", bytes_received);
+      }
+
+      // 处理发送数据
+      static uint8_t send_buf[4096];
       to_net_data_queue_mutex_.Lock();
       auto len = to_net_data_queue_.Size();
       if (len > 0) {
-        to_net_data_queue_.PopBatch(buf, len);
+        to_net_data_queue_.PopBatch(send_buf, len);
         to_net_data_queue_mutex_.Unlock();
-        send(tcp_sock, buf, len, 0);
+        ssize_t ans = send(tcp_sock, send_buf, len, 0);
+        if (ans < 0) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // 套接字不可用，继续轮询
+          } else {
+            XR_LOG_ERROR("TCP send failed: %d", errno);
+            close(tcp_sock);
+            return;
+          }
+        }
       } else {
         to_net_data_queue_mutex_.Unlock();
       }
-      LibXR::Thread::Sleep(2);
+
+      LibXR::Thread::Sleep(1);
     }
 
     close(tcp_sock);
