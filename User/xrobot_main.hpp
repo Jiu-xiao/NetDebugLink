@@ -10,7 +10,7 @@ static void XRobotMain(LibXR::HardwareContainer &hw) {
   ApplicationManager appmgr;
 
   // Auto-generated module instantiations
-  static NetDebugLink netdebuglink(hw, appmgr, 5000, 5001, 11000, "uart_cdc", {"uart1", "uart2"});
+  static NetDebugLink netdebuglink(hw, appmgr, 5000, 5001, 40000, "uart_cdc", {"uart1", "uart2"});
 
   while (true) {
     appmgr.MonitorAll();
