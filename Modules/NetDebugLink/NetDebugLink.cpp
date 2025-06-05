@@ -25,6 +25,7 @@ void NetDebugLink::PeripheralInit() {
 
     static const char *modes[] = {"Init", "SMART_CONFIG", "SCANING",
                                   "CONNECTED"};
+    UNUSED(modes);
     XR_LOG_DEBUG("Mode: %s", modes[(int)self->mode_]);
     switch (self->mode_) {
       case Mode::Init:

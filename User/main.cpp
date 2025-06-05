@@ -1,3 +1,4 @@
+#include "esp32_nvs_flash_database.hpp"
 #include "esp_adc.hpp"
 #include "esp_gpio.hpp"
 #include "esp_pwm.hpp"
@@ -10,9 +11,10 @@
 #include "xrobot_main.hpp"
 
 extern "C" void app_main(void) {
-  nvs_flash_init();
-
   LibXR::ESP32Timebase timebase;
+
+  LibXR::ESP32NvsFlashDatabase db;
+
   LibXR::PlatformInit(static_cast<uint32_t>(LibXR::Thread::Priority::MEDIUM),
                       16000);
 
@@ -42,7 +44,8 @@ extern "C" void app_main(void) {
       LibXR::Entry<LibXR::UART>{.object = uart_2, .aliases = {"uart2"}},
       LibXR::Entry<LibXR::UART>{.object = uart_cdc, .aliases = {"uart_cdc"}},
       LibXR::Entry<LibXR::WifiClient>{.object = wifi,
-                                      .aliases = {"wifi_client"}});
+                                      .aliases = {"wifi_client"}},
+      LibXR::Entry<LibXR::Database>{.object = db, .aliases = {"database"}});
 
   XRobotMain(hw);
 }

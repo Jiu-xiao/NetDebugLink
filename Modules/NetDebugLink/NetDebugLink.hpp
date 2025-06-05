@@ -36,7 +36,25 @@ class NetDebugLink : public LibXR::Application {
  public:
   enum class Mode { Init, SMART_CONFIG, SCANING, CONNECTED };
 
-  enum class Command : uint8_t { PING = 0, REMOTE_PING, REBOOT = 1 };
+  class Command {
+   public:
+    enum class Type : uint8_t {
+      PING = 0,
+      REMOTE_PING = 1,
+      REBOOT = 2,
+      RENAME = 3,
+      CONFIG_UART = 4,
+    };
+
+    Type type;
+    union {
+      char device_name[32];
+      struct {
+        uint8_t uart_index;
+        LibXR::UART::Configuration uart_config;
+      } uart_config;
+    } data;
+  };
 
   typedef struct {
     LibXR::UART *uart;
@@ -63,6 +81,11 @@ class NetDebugLink : public LibXR::Application {
     button_ = hw.template FindOrExit<LibXR::GPIO>({"button"});
     wifi_ = hw.template FindOrExit<LibXR::WifiClient>({"wifi_client"});
     uart_cdc_ = hw.template FindOrExit<LibXR::UART>({usb});
+    db_ = hw.template FindOrExit<LibXR::Database>({"database"});
+    device_name_key_ =
+        new LibXR::Database::Key<std::array<char, 32>>(*db_, "device_name");
+
+    XR_LOG_INFO("Device name: %s", &(device_name_key_->data_[0]));
 
     void (*from_net_data_cb_fun)(
         bool in_isr, LibXR::Topic::TopicHandle tp,
@@ -106,6 +129,46 @@ class NetDebugLink : public LibXR::Application {
       uarts_.Add(*node);
     }
 
+    void (*commnd_topic_cb_fun)(
+        bool in_isr, NetDebugLink *self,
+        LibXR::RawData &data) = [](bool in_isr, NetDebugLink *self,
+                                   LibXR::RawData &data) {
+      Command *cmd = reinterpret_cast<Command *>(data.addr_);
+      switch (cmd->type) {
+        case Command::Type::PING:
+          break;
+        case Command::Type::REMOTE_PING:
+          break;
+        case Command::Type::REBOOT:
+          break;
+        case Command::Type::RENAME:
+          memcpy(&(self->device_name_key_->data_[0]), cmd->data.device_name,
+                 32);
+          self->device_name_key_->data_[31] = 0;
+          self->device_name_key_->Set(self->device_name_key_->data_);
+          XR_LOG_INFO("Device name changed: %s", self->device_name_key_->data_);
+          break;
+        case Command::Type::CONFIG_UART: {
+          uint32_t index = 0;
+          self->uarts_.Foreach<UartInfo>([&](UartInfo &info) {
+            if (index == cmd->data.uart_config.uart_index) {
+              info.uart->SetConfig(cmd->data.uart_config.uart_config);
+              return ErrorCode::FAILED;
+            }
+            index++;
+            return ErrorCode::OK;
+          });
+          break;
+        }
+      }
+    };
+
+    auto command_topic_cb =
+        LibXR::Topic::Callback::Create(commnd_topic_cb_fun, this);
+    command_topic_.RegisterCallback(command_topic_cb);
+
+    from_net_server_.Register(command_topic_);
+
     PeripheralInit();
 
     thread_.Create(this, ThreadFun, "NetDebugLink", thread_stack_size,
@@ -120,8 +183,8 @@ class NetDebugLink : public LibXR::Application {
 
   void InitPingTask() {
     void (*ping_task_fun)(NetDebugLink *) = [](NetDebugLink *self) {
-      LibXR::Topic::PackedData<Command> ping;
-      Command cmd = Command::PING;
+      LibXR::Topic::PackedData<Command::Type> ping;
+      Command::Type cmd = Command::Type::PING;
       LibXR::Topic::PackData(self->command_topic_.GetKey(), ping, cmd);
       self->to_cdc_data_queue_mutex_.Lock();
       self->to_cdc_data_queue_.PushBatch(&ping, sizeof(ping));
@@ -234,9 +297,35 @@ class NetDebugLink : public LibXR::Application {
                            (struct sockaddr *)&sender, &sender_len);
         if (len >= 0) {
           buf[len] = 0;
+          static constexpr char kUdpBroadcastMessageDefault[] =
+              "XRobot Debug Tools Default Message";
+          static constexpr char kUdpBroadcastMessageFiltered[] =
+              "XRobot Debug Tools Message Filtered:";
           XR_LOG_INFO("Received from %s: %s", inet_ntoa(sender.sin_addr), buf);
-          self->mode_ = Mode::CONNECTED;
-          self->OnConnected(&sender);
+
+          bool filter_match = false;
+
+          if (strncmp(reinterpret_cast<char *>(buf),
+                      kUdpBroadcastMessageFiltered,
+                      sizeof(kUdpBroadcastMessageFiltered) - 1) == 0) {
+            if (strstr(&self->device_name_key_->data_[0],
+                       reinterpret_cast<char *>(
+                           &buf[sizeof(kUdpBroadcastMessageFiltered)])) !=
+                nullptr) {
+              filter_match = true;
+            }
+          } else if (strncmp(reinterpret_cast<char *>(buf),
+                             kUdpBroadcastMessageDefault,
+                             sizeof(kUdpBroadcastMessageDefault) - 1) == 0) {
+            filter_match = true;
+          }
+
+          if (filter_match) {
+            self->mode_ = Mode::CONNECTED;
+            self->OnConnected(&sender);
+          } else {
+            self->mode_ = Mode::SCANING;
+          }
         } else {
           XR_LOG_WARN("recvfrom timed out");
           self->mode_ = Mode::SCANING;
@@ -363,6 +452,8 @@ class NetDebugLink : public LibXR::Application {
   LibXR::PWM *led_;
   LibXR::UART *uart_cdc_;
   LibXR::WifiClient *wifi_;
+  LibXR::Database *db_;
+  LibXR::Database::Key<std::array<char, 32>> *device_name_key_;
   LibXR::LockFreeList uarts_;
   LibXR::LockFreeList topics_;
   LibXR::Topic uart_cdc_topic_;
