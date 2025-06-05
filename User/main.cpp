@@ -28,9 +28,9 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32VirtualUART<2048> uart_cdc(20, 10, 2048, 10, 2048);
 
-  LibXR::ESP32UART uart_2(UART_NUM_0, 3, 4, 256, 2048, 20);
+  LibXR::ESP32UART uart_1(UART_NUM_0, 3, 4, 256, 2048, 20);
 
-  LibXR::ESP32UART uart_1(UART_NUM_1, 3, 4, 256, 2048, 20);
+  LibXR::ESP32UART uart_2(UART_NUM_1, 5, 6, 256, 2048, 20);
 
   LibXR::STDIO::write_ = uart_cdc.write_port_;
   LibXR::STDIO::read_ = uart_cdc.read_port_;

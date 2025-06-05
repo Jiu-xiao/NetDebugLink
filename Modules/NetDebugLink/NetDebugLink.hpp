@@ -59,6 +59,7 @@ class NetDebugLink : public LibXR::Application {
   typedef struct {
     LibXR::UART *uart;
     LibXR::Topic topic;
+    uint8_t uart_index;
   } UartInfo;
 
   NetDebugLink(LibXR::HardwareContainer &hw, LibXR::ApplicationManager &app,
@@ -110,18 +111,21 @@ class NetDebugLink : public LibXR::Application {
       instance_->uarts_.Foreach<UartInfo>(foreach_fun);
     };
 
-    auto cdc_node =
-        new LibXR::LockFreeList::Node<UartInfo>({uart_cdc_, uart_cdc_topic_});
+    auto cdc_node = new LibXR::LockFreeList::Node<UartInfo>(
+        {uart_cdc_, uart_cdc_topic_, 0});
     from_net_server_.Register(cdc_node->data_.topic);
     auto from_net_data_cb_cdc = LibXR::Topic::Callback::Create(
         from_net_data_cb_fun, LibXR::Topic::TopicHandle(cdc_node->data_.topic));
     cdc_node->data_.topic.RegisterCallback(from_net_data_cb_cdc);
     uarts_.Add(*cdc_node);
 
+    uint8_t uart_index = 1;
+
     for (auto uart_name : uarts) {
       auto node = new LibXR::LockFreeList::Node<UartInfo>(
           {hw.template FindOrExit<LibXR::UART>({uart_name}),
-           LibXR::Topic(uart_name, 4096)});
+           LibXR::Topic(uart_name, 4096), uart_index});
+      uart_index++;
       from_net_server_.Register(node->data_.topic);
       auto from_net_data_cb = LibXR::Topic::Callback::Create(
           from_net_data_cb_fun, LibXR::Topic::TopicHandle(node->data_.topic));
@@ -149,13 +153,14 @@ class NetDebugLink : public LibXR::Application {
           XR_LOG_INFO("Device name changed: %s", self->device_name_key_->data_);
           break;
         case Command::Type::CONFIG_UART: {
-          uint32_t index = 0;
           self->uarts_.Foreach<UartInfo>([&](UartInfo &info) {
-            if (index == cmd->data.uart_config.uart_index) {
+            if (info.uart_index == cmd->data.uart_config.uart_index) {
               info.uart->SetConfig(cmd->data.uart_config.uart_config);
+              info.uart->read_port_->Reset();
+              info.uart->write_port_->Reset();
+              XR_LOG_INFO("UART config changed");
               return ErrorCode::FAILED;
             }
-            index++;
             return ErrorCode::OK;
           });
           break;
@@ -297,26 +302,23 @@ class NetDebugLink : public LibXR::Application {
                            (struct sockaddr *)&sender, &sender_len);
         if (len >= 0) {
           buf[len] = 0;
-          static constexpr char kUdpBroadcastMessageDefault[] =
+          static constexpr char msg_default[] =
               "XRobot Debug Tools Default Message";
-          static constexpr char kUdpBroadcastMessageFiltered[] =
+          static constexpr char msg_filtered[] =
               "XRobot Debug Tools Message Filtered:";
           XR_LOG_INFO("Received from %s: %s", inet_ntoa(sender.sin_addr), buf);
 
           bool filter_match = false;
 
-          if (strncmp(reinterpret_cast<char *>(buf),
-                      kUdpBroadcastMessageFiltered,
-                      sizeof(kUdpBroadcastMessageFiltered) - 1) == 0) {
+          if (strncmp(reinterpret_cast<char *>(buf), msg_filtered,
+                      sizeof(msg_filtered) - 1) == 0) {
             if (strstr(&self->device_name_key_->data_[0],
-                       reinterpret_cast<char *>(
-                           &buf[sizeof(kUdpBroadcastMessageFiltered)])) !=
+                       reinterpret_cast<char *>(&buf[sizeof(msg_filtered)])) !=
                 nullptr) {
               filter_match = true;
             }
-          } else if (strncmp(reinterpret_cast<char *>(buf),
-                             kUdpBroadcastMessageDefault,
-                             sizeof(kUdpBroadcastMessageDefault) - 1) == 0) {
+          } else if (strncmp(reinterpret_cast<char *>(buf), msg_default,
+                             sizeof(msg_default) - 1) == 0) {
             filter_match = true;
           }
 
