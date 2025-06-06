@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en" class="h-100">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta name="description" content="" />
+        <meta name="author" content="" />
+        <title>ESP Launchpad</title>
+        <!-- Favicon-->
+        <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+        <!-- Core theme CSS (includes Bootstrap)-->
+        <link href="css/styles.css" rel="stylesheet" />
+        <link href="css/custom.css" rel="stylesheet" />
+        <link href="css/xterm.css" rel="stylesheet" />
+        <link href="minimal-launchpad/minimal_ui_styles.css" rel="stylesheet" />
+    </head>
+    <body class="d-flex flex-column h-100">
+         <!-- Modal for flashiing status-->
+        <div class="container" id="mainContainer">
+
+            <button type="button" class="btn btn-info btn-lg" data-bs-toggle="modal" data-bs-target="#myModal" id="statusModal" hidden>Open Modal</button>
+            <div class="modal fade" id="myModal" role="dialog">
+              <div class="modal-dialog modal-lg">
+
+                <!-- Modal content-->
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <img src="./assets/esp-logo.png" width="42" height="42" style="vertical-align:middle"></img>&emsp;
+                    <h4 class="modal-title"><span style="color: #17a2b8;"> ESP固件烧录状态</span></h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="closeFlashComplete"></button>
+                  </div>
+                  <div class="modal-body" id="preview_body">
+                    <div><p>固件烧录完成! 在控制台中点击 <b>'重启设备'</b> 按钮，来运行新烧录的应用程序.
+                      <br><br>
+                      <span id="appDownloadLink"></span>
+                      <br /><br />
+                      <span id="setupPayloadInfoText"></span>
+                    </p>
+                    </div>
+                    <hr>
+                    <div id='qrcodeContainer' style='display:flex'>
+                        <div id="qrAndroidRow">
+                            <div id="androidAppLogo" style="padding-bottom: 5px;"></div>
+                            <div id='qrcodeAndroidApp' style="padding-right: 40px;"></div>
+                        </div>
+                        <div id="qrIOSRow">
+                            <div id="iosAppLogo" style="padding-bottom: 5px;"></div>
+                            <div id='qrcodeIOSApp' style="padding-right: 40px;"></div>
+                        </div>
+                        <div id="setupPayloadRow" class="ms-auto">
+                            <div id="setupLogoContainer" style="padding-bottom: 5px;"></div>
+                            <div id='setupQRCodeContainer'></div>
+                        </div>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="app-button btn btn-outline-dark" type="button" id="done" data-bs-dismiss="modal">确定</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </div>
+        <!-- Modal for flashing status section ends-->
+
+        <!-- Modal for reset device starts-->
+        <div class="container" id="mainContainer">
+
+            <button type="button" class="btn btn-info btn-lg" data-bs-toggle="modal" data-bs-target="#resetModal" id="resetConfirmation" hidden>Open Modal</button>
+            <div class="modal fade" id="resetModal" role="dialog">
+              <div class="modal-dialog modal-lg">
+
+                <!-- Modal content-->
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <img src="./assets/esp-logo.png" width="42" height="42" style="vertical-align:middle"></img>&emsp;
+                    <h4 class="modal-title"><span style="color: #17a2b8;"> ESP 重启设备确认 </span></h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="closeResetModal"></button>
+                  </div>
+                  <div class="modal-body" id="preview_body">
+                    <div id="resetMessage">
+                        <p>这将重置您的设备。点击“确认”继续。</p>
+                        <button class="app-button btn btn-outline-dark" type="button" id="resetButton" data-toggle="tooltip"
+                        data-placement="right" title="Confirm to Reset your device">确认</button>
+                        <div><br></div>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+
+                  </div>
+                </div>
+              </div>
+            </div>
+        </div>
+
+    <div id="main">
+        <!-- Responsive navbar-->
+        <nav class="navbar navbar-expand-lg">
+            <div class="container">
+                <h4 class="topic"  data-target-tab-panel-id="quickstart">
+                    <img src="assets/logo-v1.png" class="logo" />
+                </h4>
+                <!-- <span>A serial flasher utility for Espressif chips</span> -->
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+                <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                        <li class="nav-item active" data-role="nav-menu-tab" data-target-tab-panel-id="quickstart">
+                            <button class="nav-link icon-button">
+                                <img src="assets/icons/quickstart.png" class="icon" />
+                                <span>快速应用</span>
+                            </button>
+                        </li>
+
+                        <li class="nav-item" data-role="nav-menu-tab" data-target-tab-panel-id="diy">
+                            <button class="nav-link icon-button">
+                                <img src="assets/icons/diy.png" class="icon" />
+                                <span>自定义</span>
+                            </button>
+                        </li>
+
+                        <li class="nav-item">
+                            <button class="nav-link icon-button" id="connectButton">
+                                <img src="assets/icons/connect.png" class="icon" />
+                                <span>连接</span>
+                            </button>
+                            <button class="nav-link icon-button" id="disconnectButton">
+                                <img src="assets/icons/disconnect.png" class="icon" />
+                                <span>断开</span>
+                            </button>
+                        </li>
+
+                        <li class="nav-item" data-role="nav-menu-tab" data-target-tab-panel-id="console">
+                            <button class="nav-link icon-button" id="v-pills-console-tab">
+                                <img src="assets/icons/console.png" class="icon" />
+                                <span>控制台</span>
+                            </button>
+                        </li>
+
+                        <li class="nav-item" data-role="nav-menu-tab" data-target-tab-panel-id="settings">
+                            <button class="nav-link icon-button">
+                                <img src="assets/icons/settings.png" class="icon" />
+                                <span>设置</span>
+                            </button>
+                        </li>
+
+                        <!-- <li class="nav-item" data-role="nav-menu-tab" data-target-tab-panel-id="about">
+                            <button class="nav-link icon-button" id="aboutButton">
+                                <img src="assets/icons/about-us.png" class="icon" />
+                                <span>关于</span>
+                            </button>
+                        </li> -->
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <!-- Page content-->
+        <div class="container" id="alert-container">
+            <div class="text-center mt-3 intro-text">
+                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                    <label style="display:none" id="lblConnTo"><b>已连接到设备: </b></label>
+                    <p><span>ESP Launchpad 可以将你选择好的固件下载到你的设备中.</span>
+                    <br /><span id="ensureConnect"> 确保您已将设备连接到序列USB端口。单击顶部菜单选项中的“连接”按钮，以连接到您连接的设备。
+                        注意：一旦启动刷新固件的操作，您设备之前的固件将会被覆盖。</span>
+                    </p>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick start tab content - start -->
+        <div class="container tabs-section main-page-tab-panel" data-tab-panel-id="quickstart">
+            <h5 class="pt-4 pb-2 lh-lg"><span id="qtLabel">您可以从一些 ESP 的预构建、开箱即用的示例中进行选择，进行烧录和运行</span></h5>
+            <div class="form">
+                <div class="d-flex justify-content-between flex-wrap form-config-info-container-wrapper">
+                    <div class="form-container">
+                        <div class="field-container">
+                            <label>
+                                选择应用：
+                            </label>
+                            <div class="field">
+                                <select name="device" id="device">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-container">
+                            <label>
+                                选择芯片类型：
+                            </label>
+                            <div class="field">
+                                <div id="chipsets">
+                                    <div class="form-check-inline">
+                                        <label class="form-check-label" for="radio1">ESP32&nbsp;
+                                            <input type="radio" checked class="form-check-input" name="chipType" id="radio1" value="esp32_matter_all-clusters-app_te6_merged.bin">
+                                        </label>
+                                    </div>
+                                    <div class="form-check-inline">
+                                        <label class="form-check-label" for="radio2">ESP32-C3&nbsp;
+                                            <input type="radio" class="form-check-input" name="chipType" id="radio2" value="esp32c3_matter_all-clusters-app_te6_merged.bin">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="field-container" id ="developKitsContainer" style="display: none">
+                            <label>
+                                ESP Develop Kits
+                            </label>
+                            <div class="field">
+                                <div id="developKits">
+                                    <div class="form-check-inline">
+                                        <label class="form-check-label" for="radio3">ESP32-S3-DevKits&nbsp;
+                                            <input type="radio" checked class="form-check-input" name="developKitsType" id="radio3" value="">
+                                        </label>
+                                    </div>
+                                    <div class="form-check-inline">
+                                        <label class="form-check-label" for="radio4">ESP32-S3-DevKits&nbsp;
+                                            <input type="radio" class="form-check-input" name="developKitsType" id="radio4" value="">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="field-container" id="appDescriptionContainer" style="display: none; align-items: baseline;">
+                            <label>
+                                应用描述
+                            </label>
+                            <span class="appdescription-text" id="appDescription">
+                            </span>
+                        </div>
+                        <div class="field-container">
+                            <div class="field-container" title="顶部菜单先进行连接操作" style="display:inline-block" data-toggle="tooltip" id="flashWrapper">
+                                <button class="app-button submit-form-button btn btn-outline-dark" id="flashButton" disabled>烧录</button>
+                            </div>
+                            <div id="appInfoTriggerContainer" class="field-container app-info-trigger-container" style="display: none;">
+                                <a href="#" role="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight">查看应用的说明信息</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="offcanvas offcanvas-end w-50" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel">
+                        <div class="offcanvas-header">
+                          <h2 id="offcanvasRightLabel">应用说明</h2>
+                          <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                        </div>
+                        <div class="offcanvas-body">
+                            <div id="appInfo"></div>
+                        </div>
+                    </div>
+                    <div class="card text-dark bg-light app-config-info-container" id="appConfigInfoContainer" style="display: none;">
+                        <div class="card-header">应用配置&colon;</div>
+                        <div class="card-body overflow-auto" id="appConfigInfo"></div>
+                    </div>
+                </div>
+                <div class="mt-xl-5" id="progressMsgContainerQS" style="display:none">
+                    <span id="progressMsgQS" style="display:none"><i>当前操作需要等待一段时间，您可以在控制台查看进度</i></span>
+                    <br /><br />
+                    <span id="setupPayloadInfoTextQS"></span>
+                    <br><br>
+                </div>
+                <div id='qrcodeContainerQS' style='display:flex'>
+                    <div id="qrAndroidRowQS">
+                        <div id="androidAppLogoQS" style="padding-bottom: 5px;"></div>
+                        <div id='qrcodeAndroidAppQS' style="padding-right: 40px;"></div>
+                    </div>
+                    <div id="qrIOSRowQS">
+                        <div id="iosAppLogoQS" style="padding-bottom: 5px;"></div>
+                        <div id='qrcodeIOSAppQS' style="padding-right: 40px;"></div>
+                    </div>
+                    <div id="setupPayloadRowQS" class="ms-auto">
+                        <div id="setupLogoContainerQS" style="padding-bottom: 5px;"></div>
+                        <div id='setupQRCodeContainerQS'></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Quick start tab content - end -->
+
+        <!-- DIY tab content - start -->
+        <div class="container tabs-section main-page-tab-panel" data-tab-panel-id="diy">
+            <h5 class="pt-4 pb-2 lh-lg">从本地存储中选择您自己构建的固件烧录和使用。</h5>
+                <br>
+                <input class="btn btn-danger btn-sm" type="button" id="eraseButton" value="擦除芯片" data-toggle="tooltip"
+            data-placement="top" title="擦除芯片"/>
+
+                <div class="alert alert-danger alert-dismissible fade-in-down" id="alertDiv" style="display:none; margin-top:10px">
+                    <a href="#" class="close" aria-label="close" onclick="$('.alert').hide()">&times;</a>
+                    <span id="alertmsg"></span>
+                </div>
+                <div id="files">
+                    <table id="fileTable">
+                        <thead>
+                            <tr>
+                                <th>烧录地址</th>
+                                <th>选择文件</th>
+                                <th>&nbsp;</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr id="row0">
+                                <td class="input-col"><input type="text" id="offset1" name="offset1" value="0x1000"></td>
+                                <td class="input-col"><input type="file" id="selectFile1" name="selected_file1"></td>
+                                <td><input type="image" src="assets/icons/remove.png"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="button-container text-end mb-sm-3">
+                        <button type="button" class="app-button submit-form-button btn btn-outline-dark" id="addFile"
+                        data-toggle="tooltip" data-placement="right" title="增加需要烧录的文件" style="margin-right:10px;">添加文件</button>
+                    <div class="field-container" data-toggle="tooltip" data-placement="right" title="顶部菜单先进行连接操作" id="programwrapper" style="display:inline-block">
+                        <button type="button" class="app-button submit-form-button btn btn-outline-dark" id="programButton" disabled>烧录</button>
+                    </div>
+                    </div>
+                </div>
+                <output id="list"></output>
+                <hr/>
+                <span id="progressMsgDIY" style="display:none"><i>当前操作需要等待一段时间，您可以在控制台查看进度</i></span>
+        </div>
+        <!-- DIY tab content - end -->
+
+        <!-- Console tab content - start -->
+        <div class="container main-page-tab-panel" data-tab-panel-id="console">
+            <div class="row" id="consolePageWrapper">
+                <div class="appinfo-flash-container col-6" id="appInfoFlashContainer" style="display:none;">
+                    <div id="appInfoFlash"></div>
+                </div>
+                <div class="col-12 fade-in-down" id="terminalContainer" style="display:none;">
+                    <div class="button-container text-end mb-sm-3">
+                        <div class="field-container" data-toggle="tooltip" data-placement="right" title="重启设备" style="display:inline-block;">
+                            <button type="button" class="app-button btn btn-outline-dark" id="consoleStartButton" disabled>
+                                重启设备
+                            </button>
+                        </div>
+                    </div>
+                    <div id="terminal"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Console tab content - end -->
+
+        <!-- Settings tab content - start -->
+        <div class="container main-page-tab-panel" data-tab-panel-id="settings">
+            <div class="row">
+                <div class="col-xs-12 ">
+                    <div class="form">
+                        <div id="baudRateSettings" class="lh-lg">
+                            <span><b>根据您的应用程序配置串行通信的波特率:</b></span>
+                        </div>
+                        <hr/>
+                        <div class="d-flex justify-content-around">
+                            <div class="field-container">
+                                <label>
+                                    烧录比特率：
+                                </label>
+                                <div class="field" id="flashingBaudrateSettings">
+                                    <select name="flashingBaudrateSelect" id="flashingBaudrateSelect">
+                                        <option value="921600">921600</option>
+                                        <option value="460800">460800</option>
+                                        <option value="230400">230400</option>
+                                        <option value="115200">115200</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="field-container">
+                                <label>
+                                    控制台波特率
+                                </label>
+                                <div class="field" id="consoleBaudrateSettings">
+                                    <select name="consoleBaudrateSelect" id="consoleBaudrateSelect">
+                                        <option value="115200">115200</option>
+                                        <option value="74880">74880</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="settingsWarning" style="display:none" class="mt-3">
+                            <div class="mb-1">
+                                <i>
+                                    ** 不能更改已连接设备的烧录波特率。请断开设备连接，然后更改烧录波特率。
+                                </i>
+                            </div>
+                            <div>
+                                <i>
+                                    ** 如果您没有像<a href="https://git.diybyte.com:52088/whble/esp-launchpad/blame/branch/main/config/config.toml" target="_blank">这里</a>提到的那样在TOML文件中配置控制台波特率
+                                     或者使用"自定义"模式, 您可以在设备重置期间更改它。
+                                </i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Settings tab content - end -->
+
+        <!-- About us tab content - start -->
+        <!-- <div class="container main-page-tab-panel mt-5 about-container" data-tab-panel-id="about">
+            <div class="row">
+                <div class="col-xs-12">
+                    <span>
+                        ESP Launchpad is a web based tool, available for flashing firmware application to the ESP32 device connected via
+                        USB serial port.
+                    </span>
+                    <p>
+                        There are two modes available for using this tool:
+                        <ul>
+                          <li><a class="anchor" href="#qsDiv">Quick Start</a> : 4 Easy Steps - Plug, Connect, Choose Built-In Firmware Image, Flash!</li>
+                          <li><a class="anchor" href="#diyDiv">DIY</a> : For Advanced Users, use your own pre-built Firmware Image from local storage and Flash!</li>
+                        </ul>
+
+                        You can even build and <a class="anchor" href="#publishDiv">Publish your own Apps </a> for ESP32 using ESP Launchpad.
+                    </p>
+                </div>
+                <!- Quick Try ->
+                <div class="col-xs-12 mt-5 " id="qsDiv">
+                    <h4 class="topic mb-4"><b>Quick Start</b></h4>
+                    <p>
+                        ESP currently provides a few built in, ready to use examples that can be flashed on the ESP32 devices. You can
+                        choose one of the built in firmware application for either RainMaker or Matter, and as per the chipset type.
+                        Just plug in your ESP32 device to the serial USB port. Use connect option in the menu to connect to your ESP32 device. Choose
+                        the firmware from the built-in firmware example set. Click Flash!
+                    </p>
+                    <p>The firmware will be flashed on to your connected device. You can watch the progress of the firmware flashing in
+                        the console window.</p>
+                    <p>This easy, 4 step process will flash the firmware on to the connected device and bring it into play as you want it to be.</p>
+                    <h6 class="trynow mb-4" data-target-tab-panel-id="quickstart"><b>Try Now !</b></h6>
+                </div>
+                <!- DIY ->
+                <div class="col-xs-12 mt-5 " id="diyDiv">
+                    <h4 class="topic mb-4" ><b>DIY</b></h4>
+                    <p>
+                        You can build your own firmware binaries using the ESP IDF tools. These firmware images can then be flashed from
+                        your local machine to the connected device. Just connect your ESP32 device to the serial USB port. Using the web
+                        based tool, connect to your device. You can then select the firmware application from the local storage of the
+                        machine. Choose the memory address where to flash the firmware. Firmware can be a single file or a set of
+                        multiple files to be flashed at particular memory addresses.
+                    </p>
+                    <p><b>Click Flash!</b></p>
+                    <p>The firmware will be flashed on to your connected device. You can watch the progress of the firmware flashing in
+                        the console window.
+                    </p>
+                    <h6 class="trynow mb-4" data-target-tab-panel-id="diy"><b>Try Now !</b></h6>
+                </div>
+                <!- Publish your own firmware apps ->
+                <div class="col-xs-12 mt-5" id="publishDiv">
+                    <h4 class=" mb-4" style="color: #e63f36;"><b>Publish your own firmware apps</b></h4>
+                    <p>ESP Launchpad also lets you easily publish your firmware apps for others to try.</p>
+
+                    <p>The ESP Launchpad Quick Start page would be rendered by referring to a TOML configuration file, where you can configure where to pick
+                    all the component images of your firmware, and the supported hardware. You could also link to any support phone apps to work along with
+                    this firmware. A sample TOML config file can be viewed <a href="https://espressif.github.io/esp-launchpad/config/config.toml"> here </a> </p>
+
+                    <p>Rest of the flashing procedure is same easy 4 step process as the Quick Start one above.</p>
+
+                    <p>Once ready, you can use the following image and add following html code on your website for supporting ESPaunchpad with your configuration.
+                        Edit the query parameter in the href, replacing URL_TO_YOUR_CONFIG_TOML value where your TOML config file is hosted.
+                    </p>
+                    <div style="padding-bottom: 40px;">
+                        <div style="padding-bottom: 10px;">
+                            <img alt="Try it with ESP Launchpad" src="./assets/try_with_launchpad.png"
+                            width="250" height="70">
+                        </div>
+                        <div>
+                            <textarea readonly cols="160" rows="3"><a href="https://espressif.github.io/esp-launchpad/?flashConfigURL=URL_TO_YOUR_CONFIG_TOML">
+    <img alt="Try it with ESP Launchpad" src="https://espressif.github.io/esp-launchpad/assets/try_with_launchpad.png" width="250" height="70">
+</a>
+                            </textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> -->
+        <!-- About us tab content - end -->
+    </div>
+
+    <!-- Safari & FireFox not supported error message-->
+    <div id="unsupportedBrowserErr" style="display:none"><p align="center" style="color:red">
+        This tool is not supported on Safari & Firefox browsers yet! Please try using another browser like Google Chrome.
+            <br> <br>
+            ESP Launchpad makes use of WebUSB to communicate with the device. Currently Safari & Firefox browsers don't support it yet.
+
+            We will add support for this browser as soon as Safari & Firefox starts supporting WebUSB.
+
+    </p>
+    </div>
+
+        <footer class="mt-auto py-3">
+            <div class="container text-center">
+                <span class="text-muted">Copyright © 2024 Espressif Systems</span>
+            </div>
+        </footer>
+        <!-- Third party libraries-->
+        <script src="node_modules/xterm/lib/xterm.js"></script>
+        <script src="node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+        <script src="node_modules/crypto-js/crypto-js.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.3/pako.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+
+        <script src="js/index.js" type="module"></script>
+        <!-- Bootstrap core JS-->
+        <script src="js/jquery.min.js"></script>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script src="js/qrcode.min.js"></script>
+        <!--<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>-->
+        <!-- Core theme JS-->
+        <script src="js/scripts.js"></script>
+    </body>
+</html>
