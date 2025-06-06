@@ -27,7 +27,7 @@ jobs:
           echo "release_name=$VERSION_NAME" >> $GITHUB_ENV
 
       - name: 📦 安装 XRobot 工具链
-        run: pip install xrobot
+        run: pip install xrobot esptool
 
       - name: ⚙️ 执行 XRobot 初始化
         run: xrobot_setup
@@ -36,15 +36,15 @@ jobs:
         run: HOME=/root bash -c "source ~/esp/esp-idf/export.sh && idf.py build"
 
       - name: 🧩 拼接 ESP32-C3 固件
-        run: HOME=/root bash -c "source ~/esp/esp-idf/export.sh && \
-          \$IDF_PYTHON_ENV_PATH/bin/python -m esptool --chip esp32c3 merge_bin \
-          -o build/NetDebugLink_merged.bin \
-          --flash_mode dio \
-          --flash_freq 80m \
-          --flash_size 2MB \
-          0x0 build/bootloader/bootloader.bin \
-          0x8000 build/partition_table/partition-table.bin \
-          0x10000 build/NetDebugLink.bin"
+        run: |
+          /usr/bin/python3 -m esptool --chip esp32c3 merge_bin \
+            -o build/NetDebugLink_merged.bin \
+            --flash_mode dio \
+            --flash_freq 80m \
+            --flash_size 2MB \
+            0x0 build/bootloader/bootloader.bin \
+            0x8000 build/partition_table/partition-table.bin \
+            0x10000 build/NetDebugLink.bin
 
 
       - name: 📝 创建 Release
