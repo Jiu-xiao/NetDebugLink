@@ -2,9 +2,7 @@ name: Build NetDebugLink
 
 on:
   push:
-    branches:
-      - master
-      - main
+    branches: [master, main]
   pull_request:
   workflow_dispatch:
 
@@ -13,26 +11,74 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: xrimage/xrimage-esp32
+      image: ghcr.io/xrobot-org/docker-image-esp32:main
       options: --privileged
 
     steps:
-      - name: Checkout NetDebugLink
+      - name: 📥 Checkout NetDebugLink 源码
         uses: actions/checkout@v3
 
-      - name: Clone libxr submodule
+      - name: 📦 Clone libxr 仓库
         run: git clone https://github.com/Jiu-xiao/libxr
 
-      - name: Set up ESP-IDF environment
-        run: source ~/esp/esp-idf/export.sh
+      - name: ⏱️ Generate version name
+        run: |
+          VERSION_NAME="v$(date +%Y.%m.%d).vv$(date +%H.%M)"
+          echo "release_name=$VERSION_NAME" >> $GITHUB_ENV
 
-      - name: Install xrobot
+      - name: 📦 安装 XRobot 工具链
         run: pip install xrobot
 
-      - name: Run XRobot setup
+      - name: ⚙️ 执行 XRobot 初始化
         run: xrobot_setup
 
-      - name: Build with idf.py
+      - name: 🛠️ 构建固件
+        run: bash -c "source ~/esp/esp-idf/export.sh && idf.py build"
+
+      - name: 🔍 查找固件文件路径
+        id: find_firmware
         run: |
-          source ~/esp/esp-idf/export.sh
-          idf.py build
+          echo "firmware_app=build/NetDebugLink.bin" >> $GITHUB_OUTPUT
+          echo "firmware_bootloader=build/bootloader/bootloader.bin" >> $GITHUB_OUTPUT
+          echo "firmware_partition=build/partition_table/partition-table.bin" >> $GITHUB_OUTPUT
+
+      - name: 📝 创建 Release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.release_name }}
+          release_name: ESP32 Firmware ${{ env.release_name }}
+          draft: false
+          prerelease: false
+
+      - name: 🚚 上传主应用固件
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_firmware.outputs.firmware_app }}
+          asset_name: NetDebugLink.bin
+          asset_content_type: application/octet-stream
+
+      - name: 🚚 上传 Bootloader
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_firmware.outputs.firmware_bootloader }}
+          asset_name: bootloader.bin
+          asset_content_type: application/octet-stream
+
+      - name: 🚚 上传分区表
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_firmware.outputs.firmware_partition }}
+          asset_name: partition-table.bin
+          asset_content_type: application/octet-stream
