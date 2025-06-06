@@ -1,0 +1,7 @@
+[esp32c3]
+chipFamily = "ESP32C3"
+
+[[esp32c3.files]]
+# 使用 GitHub 的 latest release 下载合并后的固件
+path = "https://github.com/Jiu-xiao/NetDebugLink/releases/latest/download/NetDebugLink_Firmware.bin"
+address = "0x0"
