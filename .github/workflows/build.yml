@@ -12,7 +12,7 @@ jobs:
 
     container:
       image: ghcr.io/xrobot-org/docker-image-esp32:main
-      options: --privileged
+      options: --user root
 
     steps:
       - name: 📥 Checkout NetDebugLink 源码
@@ -33,14 +33,19 @@ jobs:
         run: xrobot_setup
 
       - name: 🛠️ 构建固件
-        run: bash -c "source ~/esp/esp-idf/export.sh && idf.py build"
+        run: HOME=/root bash -c "source ~/esp/esp-idf/export.sh && idf.py build"
 
-      - name: 🔍 查找固件文件路径
-        id: find_firmware
-        run: |
-          echo "firmware_app=build/NetDebugLink.bin" >> $GITHUB_OUTPUT
-          echo "firmware_bootloader=build/bootloader/bootloader.bin" >> $GITHUB_OUTPUT
-          echo "firmware_partition=build/partition_table/partition-table.bin" >> $GITHUB_OUTPUT
+      - name: 🧩 拼接 ESP32-C3 固件
+        run: HOME=/root bash -c "source ~/esp/esp-idf/export.sh && \
+          \$IDF_PYTHON_ENV_PATH/bin/python -m esptool --chip esp32c3 merge_bin \
+          -o build/NetDebugLink_merged.bin \
+          --flash_mode dio \
+          --flash_freq 80m \
+          --flash_size 2MB \
+          0x0 build/bootloader/bootloader.bin \
+          0x8000 build/partition_table/partition-table.bin \
+          0x10000 build/NetDebugLink.bin"
+
 
       - name: 📝 创建 Release
         uses: actions/create-release@v1
@@ -53,32 +58,12 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: 🚚 上传主应用固件
+      - name: 🚚 上传合并固件
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.find_firmware.outputs.firmware_app }}
-          asset_name: NetDebugLink.bin
-          asset_content_type: application/octet-stream
-
-      - name: 🚚 上传 Bootloader
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.find_firmware.outputs.firmware_bootloader }}
-          asset_name: bootloader.bin
-          asset_content_type: application/octet-stream
-
-      - name: 🚚 上传分区表
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.find_firmware.outputs.firmware_partition }}
-          asset_name: partition-table.bin
+          asset_path: build/NetDebugLink_merged.bin
+          asset_name: NetDebugLink_merged.bin
           asset_content_type: application/octet-stream
