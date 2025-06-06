@@ -1,5 +1,5 @@
 esp_toml_version = 1.0
-firmware_images_url = "https://github.com/Jiu-xiao/NetDebugLink/releases/latest/download/"
+firmware_images_url = "https://jiu-xiao.github.io/NetDebugLink/"
 supported_apps = ["NETDEBUGLINK"]
 
 [NETDEBUGLINK]
