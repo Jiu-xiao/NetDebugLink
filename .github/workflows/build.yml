@@ -1,0 +1,38 @@
+name: Build NetDebugLink
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: xrimage/xrimage-esp32
+      options: --privileged
+
+    steps:
+      - name: Checkout NetDebugLink
+        uses: actions/checkout@v3
+
+      - name: Clone libxr submodule
+        run: git clone https://github.com/Jiu-xiao/libxr
+
+      - name: Set up ESP-IDF environment
+        run: source ~/esp/esp-idf/export.sh
+
+      - name: Install xrobot
+        run: pip install xrobot
+
+      - name: Run XRobot setup
+        run: xrobot_setup
+
+      - name: Build with idf.py
+        run: |
+          source ~/esp/esp-idf/export.sh
+          idf.py build
