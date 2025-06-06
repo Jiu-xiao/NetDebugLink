@@ -1,0 +1,9 @@
+esp_toml_version = 1.0
+firmware_images_url = "https://github.com/Jiu-xiao/NetDebugLink/releases/latest/download/"
+supported_apps = ["NETDEBUGLINK"]
+
+[NETDEBUGLINK]
+chipsets = ["ESP32-C3"]
+image.esp32-c3 = "NetDebugLink_Firmware.bin"
+description = "NetDebugLink 是一个基于 ESP32-C3 的多串口远程调试模块，支持 WiFi 配网和串口桥接。"
+console_baudrate = 115200
