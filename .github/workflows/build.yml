@@ -81,6 +81,7 @@ jobs:
         run: |
           mkdir -p output
           cp build/NetDebugLink_Firmware.bin output/
+          cp -r esp_launchpad output/
 
       - name: 🔧 Setup GitHub Pages
         uses: actions/configure-pages@v5
