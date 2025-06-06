@@ -83,8 +83,10 @@ class NetDebugLink : public LibXR::Application {
     wifi_ = hw.template FindOrExit<LibXR::WifiClient>({"wifi_client"});
     uart_cdc_ = hw.template FindOrExit<LibXR::UART>({usb});
     db_ = hw.template FindOrExit<LibXR::Database>({"database"});
-    device_name_key_ =
-        new LibXR::Database::Key<std::array<char, 32>>(*db_, "device_name");
+    static constexpr std::array<char, 32> default_device_name = {
+        "XRobot NetDebugLink ESP32-C3"};
+    device_name_key_ = new LibXR::Database::Key<std::array<char, 32>>(
+        *db_, "device_name", default_device_name);
 
     XR_LOG_INFO("Device name: %s", &(device_name_key_->data_[0]));
 
