@@ -15,7 +15,7 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32NvsFlashDatabase db;
 
-  LibXR::PlatformInit(static_cast<uint32_t>(LibXR::Thread::Priority::MEDIUM),
+  LibXR::PlatformInit(static_cast<uint32_t>(LibXR::Thread::Priority::REALTIME),
                       16000);
 
   LibXR::ESP32PWM led_pwm(GPIO_NUM_8, LEDC_CHANNEL_0, LEDC_TIMER_0,

@@ -383,7 +383,7 @@ class NetDebugLink : public LibXR::Application {
 
     while (!smartconfig_requested_) {
       // 处理接收数据
-      char buf[4096];
+      static char buf[4096];
       ssize_t bytes_received = recv(tcp_sock, buf, sizeof(buf), 0);
       if (bytes_received < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -401,7 +401,7 @@ class NetDebugLink : public LibXR::Application {
       } else {
         from_net_server_.ParseData(
             {(uint8_t *)buf, static_cast<size_t>(bytes_received)});
-        XR_LOG_DEBUG("Received %d bytes", bytes_received);
+        XR_LOG_PASS("Received %d bytes", bytes_received);
       }
 
       // 处理发送数据
