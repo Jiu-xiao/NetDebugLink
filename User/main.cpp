@@ -15,8 +15,7 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32NvsFlashDatabase db;
 
-  LibXR::PlatformInit(static_cast<uint32_t>(LibXR::Thread::Priority::REALTIME),
-                      16000);
+  LibXR::PlatformInit(24, 16000);
 
   LibXR::ESP32PWM led_pwm(GPIO_NUM_8, LEDC_CHANNEL_0, LEDC_TIMER_0,
                           LEDC_TIMER_14_BIT);
@@ -26,11 +25,11 @@ extern "C" void app_main(void) {
 
   LibXR::ESP32GPIO button_gpio(GPIO_NUM_9);
 
-  LibXR::ESP32VirtualUART<2048> uart_cdc(20, 10, 2048, 10, 2048);
+  LibXR::ESP32VirtualUART<2048> uart_cdc(20, 4, 2048, 4, 2048);
 
-  LibXR::ESP32UART uart_1(UART_NUM_0, 3, 4, 256, 2048, 20);
+  LibXR::ESP32UART uart_1(UART_NUM_0, 3, 4, 256, 2048, 4);
 
-  LibXR::ESP32UART uart_2(UART_NUM_1, 5, 6, 256, 2048, 20);
+  LibXR::ESP32UART uart_2(UART_NUM_1, 5, 6, 256, 2048, 4);
 
   LibXR::STDIO::write_ = uart_cdc.write_port_;
   LibXR::STDIO::read_ = uart_cdc.read_port_;
