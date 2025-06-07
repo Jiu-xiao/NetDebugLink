@@ -33,11 +33,11 @@ repository: https://github.com/xrobot-org/NetDebugLink
 #include "uart.hpp"
 
 class NetDebugLink : public LibXR::Application {
- public:
+public:
   enum class Mode { Init, SMART_CONFIG, SCANING, CONNECTED };
 
   class Command {
-   public:
+  public:
     enum class Type : uint8_t {
       PING = 0,
       REMOTE_PING = 1,
@@ -66,14 +66,11 @@ class NetDebugLink : public LibXR::Application {
                uint32_t tcp_port, uint32_t udp_port, uint32_t thread_stack_size,
                const char *usb,
                const std::initializer_list<const char *> &uarts)
-      : tcp_port_(tcp_port),
-        udp_port_(udp_port),
+      : tcp_port_(tcp_port), udp_port_(udp_port),
         uart_cdc_topic_(LibXR::Topic("uart_cdc", 4096)),
         wifi_config_topic_("wifi_config", sizeof(LibXR::WifiClient::Config)),
-        command_topic_("command", sizeof(Command)),
-        to_net_data_queue_(1, 4096),
-        to_cdc_data_queue_(1, 4096),
-        from_net_server_(4096) {
+        command_topic_("command", sizeof(Command)), to_net_data_queue_(1, 4096),
+        to_cdc_data_queue_(1, 4096), from_net_server_(4096) {
     instance_ = this;
 
     BlufiInit();
@@ -141,32 +138,31 @@ class NetDebugLink : public LibXR::Application {
                                    LibXR::RawData &data) {
       Command *cmd = reinterpret_cast<Command *>(data.addr_);
       switch (cmd->type) {
-        case Command::Type::PING:
-          break;
-        case Command::Type::REMOTE_PING:
-          break;
-        case Command::Type::REBOOT:
-          break;
-        case Command::Type::RENAME:
-          memcpy(&(self->device_name_key_->data_[0]), cmd->data.device_name,
-                 32);
-          self->device_name_key_->data_[31] = 0;
-          self->device_name_key_->Set(self->device_name_key_->data_);
-          XR_LOG_INFO("Device name changed: %s", self->device_name_key_->data_);
-          break;
-        case Command::Type::CONFIG_UART: {
-          self->uarts_.Foreach<UartInfo>([&](UartInfo &info) {
-            if (info.uart_index == cmd->data.uart_config.uart_index) {
-              info.uart->SetConfig(cmd->data.uart_config.uart_config);
-              info.uart->read_port_->Reset();
-              info.uart->write_port_->Reset();
-              XR_LOG_INFO("UART config changed");
-              return ErrorCode::FAILED;
-            }
-            return ErrorCode::OK;
-          });
-          break;
-        }
+      case Command::Type::PING:
+        break;
+      case Command::Type::REMOTE_PING:
+        break;
+      case Command::Type::REBOOT:
+        break;
+      case Command::Type::RENAME:
+        memcpy(&(self->device_name_key_->data_[0]), cmd->data.device_name, 32);
+        self->device_name_key_->data_[31] = 0;
+        self->device_name_key_->Set(self->device_name_key_->data_);
+        XR_LOG_INFO("Device name changed: %s", self->device_name_key_->data_);
+        break;
+      case Command::Type::CONFIG_UART: {
+        self->uarts_.Foreach<UartInfo>([&](UartInfo &info) {
+          if (info.uart_index == cmd->data.uart_config.uart_index) {
+            info.uart->SetConfig(cmd->data.uart_config.uart_config);
+            info.uart->read_port_->Reset();
+            info.uart->write_port_->Reset();
+            XR_LOG_INFO("UART config changed");
+            return ErrorCode::FAILED;
+          }
+          return ErrorCode::OK;
+        });
+        break;
+      }
       }
     };
 
@@ -280,7 +276,7 @@ class NetDebugLink : public LibXR::Application {
         continue;
       }
 
-      struct timeval timeout = {.tv_sec = 0, .tv_usec = 0};
+      struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
       setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
       while (true) {
@@ -373,9 +369,9 @@ class NetDebugLink : public LibXR::Application {
     }
 
     struct tcp_keepalive {
-      uint32_t keep_idle;   // 空闲时间
-      uint32_t keep_intvl;  // Keep Alive 间隔
-      uint32_t keep_count;  // 最大重试次数
+      uint32_t keep_idle;  // 空闲时间
+      uint32_t keep_intvl; // Keep Alive 间隔
+      uint32_t keep_count; // 最大重试次数
     };
 
     tcp_keepalive ka = {.keep_idle = 5, .keep_intvl = 1, .keep_count = 5};
